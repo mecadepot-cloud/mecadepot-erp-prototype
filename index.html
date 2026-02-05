@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MECADEPOT ERP — Prototype Interactif</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230F172A'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='18' font-weight='900' fill='%23E8B931'>M</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; background: #F1F5F9; overflow: hidden; }
+  #root { height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  select, input, button { font-family: inherit; }
+  table { border-spacing: 0; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+/* ══════════════════════════════════════════════════════════════
+   MOCK DATA
+   ══════════════════════════════════════════════════════════════ */
+const PRODUCTS = [
+  { id:"P001", ref:"BRK-PAD-4520", ean:"3660210451230", name:"Plaquettes frein AV Bosch", cat:"Freinage", brand:"Bosch", priceHT:34.50, costHT:18.20, stock:45, minStock:10 },
+  { id:"P002", ref:"FLT-OIL-7831", ean:"3660210783115", name:"Filtre huile Mann HU719/7x", cat:"Filtration", brand:"Mann", priceHT:12.80, costHT:5.60, stock:120, minStock:25 },
+  { id:"P003", ref:"AMR-FRT-2290", ean:"3660210229064", name:"Amortisseur AV Sachs", cat:"Suspension", brand:"Sachs", priceHT:89.00, costHT:42.50, stock:8, minStock:5 },
+  { id:"P004", ref:"DSC-BRK-1850", ean:"3660210185023", name:"Disque frein AV Brembo", cat:"Freinage", brand:"Brembo", priceHT:56.90, costHT:28.40, stock:22, minStock:8 },
+  { id:"P005", ref:"BUG-ALM-9920", ean:"3660210992017", name:"Bougie allumage NGK", cat:"Allumage", brand:"NGK", priceHT:8.50, costHT:2.80, stock:200, minStock:50 },
+  { id:"P006", ref:"CRR-DST-3380", ean:"3660210338056", name:"Courroie distribution Gates", cat:"Distribution", brand:"Gates", priceHT:145.00, costHT:68.00, stock:3, minStock:5 },
+  { id:"P007", ref:"PLQ-ARR-6610", ean:"3660210661089", name:"Plaquettes frein AR TRW", cat:"Freinage", brand:"TRW", priceHT:28.90, costHT:14.20, stock:38, minStock:10 },
+  { id:"P008", ref:"FLT-AIR-4450", ean:"3660210445032", name:"Filtre air Mahle LX1566", cat:"Filtration", brand:"Mahle", priceHT:18.50, costHT:7.80, stock:67, minStock:15 },
+];
+
+const SUPPLIERS = [
+  { id:"S1", name:"Alliance Automotive", type:"REST", status:"active", priority:1 },
+  { id:"S2", name:"Autodistribution", type:"REST", status:"active", priority:2 },
+  { id:"S3", name:"PHE (Parts Hub Europe)", type:"SOAP", status:"active", priority:3 },
+  { id:"S4", name:"Distrigo (Stellantis)", type:"REST", status:"active", priority:4 },
+  { id:"S5", name:"TecAlliance Direct", type:"REST", status:"warning", priority:5 },
+];
+
+const ORDERS = [
+  { id:"CMD-2026-00142", client:"Garage Martin SAS", status:"DELIVERED", total:456.80, date:"2026-02-04", items:5, source:"B2B" },
+  { id:"CMD-2026-00141", client:"Auto Service Plus", status:"READY", total:234.50, date:"2026-02-04", items:3, source:"B2B" },
+  { id:"CMD-2026-00140", client:"Client comptoir", status:"DELIVERED", total:67.40, date:"2026-02-04", items:2, source:"POS" },
+  { id:"CMD-2026-00139", client:"MecaPro SARL", status:"PREPARING", total:892.10, date:"2026-02-03", items:8, source:"B2B" },
+  { id:"CMD-2026-00138", client:"Garage du Pont", status:"CONFIRMED", total:345.60, date:"2026-02-03", items:4, source:"INTERNAL" },
+  { id:"CMD-2026-00137", client:"Client comptoir", status:"DELIVERED", total:28.90, date:"2026-02-03", items:1, source:"POS" },
+  { id:"CMD-2026-00136", client:"AutoFix Express", status:"CANCELLED", total:156.00, date:"2026-02-02", items:2, source:"B2B" },
+  { id:"CMD-2026-00135", client:"Garage Martin SAS", status:"DELIVERED", total:1240.00, date:"2026-02-02", items:12, source:"B2B" },
+];
+
+const INVOICES = [
+  { id:"INV-2026-00089", order:"CMD-2026-00142", client:"Garage Martin SAS", total:548.16, status:"SENT", date:"2026-02-04", pdp:"Transmise" },
+  { id:"INV-2026-00088", order:"CMD-2026-00140", client:"Client comptoir", total:80.88, status:"ISSUED", date:"2026-02-04", pdp:"En attente" },
+  { id:"INV-2026-00087", order:"CMD-2026-00137", client:"Client comptoir", total:34.68, status:"SENT", date:"2026-02-03", pdp:"Transmise" },
+  { id:"INV-2026-00086", order:"CMD-2026-00135", client:"Garage Martin SAS", total:1488.00, status:"SENT", date:"2026-02-02", pdp:"Recue" },
+];
+
+const QUOTES = [
+  { id:"DEV-2026-00034", client:"Carrosserie Dupont", status:"SENT", total:2340.00, date:"2026-02-03", validUntil:"2026-03-05" },
+  { id:"DEV-2026-00033", client:"AutoFix Express", status:"ACCEPTED", total:456.80, date:"2026-02-01", validUntil:"2026-03-03" },
+  { id:"DEV-2026-00032", client:"Garage du Pont", status:"DRAFT", total:890.00, date:"2026-01-30", validUntil:"2026-03-01" },
+];
+
+const CUSTOMERS = [
+  { id:"C001", name:"Garage Martin SAS", type:"B2B", grid:"PRO-15", email:"contact@garagemartin.fr", city:"Saint-Antoine", orders:45, ca:34500 },
+  { id:"C002", name:"Auto Service Plus", type:"B2B", grid:"PRO-10", email:"achat@autoserviceplus.fr", city:"Lyon", orders:23, ca:18200 },
+  { id:"C003", name:"MecaPro SARL", type:"B2B", grid:"PRO-20", email:"commandes@mecapro.fr", city:"Marseille", orders:67, ca:52800 },
+  { id:"C004", name:"Garage du Pont", type:"B2B", grid:"STD", email:"info@garagedup.fr", city:"Grenoble", orders:12, ca:8900 },
+  { id:"C005", name:"AutoFix Express", type:"B2B", grid:"PRO-10", email:"fix@autofix.fr", city:"Nice", orders:8, ca:5600 },
+  { id:"C006", name:"Carrosserie Dupont", type:"B2B", grid:"STD", email:"dupont@carross.fr", city:"Toulouse", orders:3, ca:2400 },
+];
+
+const RETURNS = [
+  { id:"RET-2026-00012", order:"CMD-2026-00128", client:"Auto Service Plus", status:"APPROVED", reason:"Piece incompatible", date:"2026-02-03" },
+  { id:"RET-2026-00011", order:"CMD-2026-00125", client:"Garage Martin SAS", status:"RECEIVED", reason:"Defaut fabrication", date:"2026-02-01" },
+  { id:"RET-2026-00010", order:"CMD-2026-00120", client:"MecaPro SARL", status:"REFUNDED", reason:"Erreur reference", date:"2026-01-28" },
+];
+
+const ROLES = {
+  OWNER:{ label:"OWNER", desc:"Proprietaire", icon:"\u{1F451}", color:"#E8B931" },
+  ADMIN:{ label:"ADMIN", desc:"Administrateur", icon:"\u2699\uFE0F", color:"#8B5CF6" },
+  MANAGER:{ label:"MANAGER", desc:"Responsable", icon:"\u{1F4CA}", color:"#3B82F6" },
+  COMMERCIAL:{ label:"COMMERCIAL", desc:"Commercial", icon:"\u{1F91D}", color:"#10B981" },
+  COUNTER_AGENT:{ label:"COUNTER", desc:"Agent comptoir", icon:"\u{1F3EA}", color:"#F59E0B" },
+  WAREHOUSE_KEEPER:{ label:"WAREHOUSE", desc:"Magasinier", icon:"\u{1F4E6}", color:"#EF4444" },
+  ACCOUNTING:{ label:"ACCOUNTING", desc:"Comptable", icon:"\u{1F4B0}", color:"#6366F1" },
+  PURCHASER:{ label:"PURCHASER", desc:"Acheteur", icon:"\u{1F6D2}", color:"#EC4899" },
+  B2B_OWNER:{ label:"B2B_OWNER", desc:"Admin client B2B", icon:"\u{1F3E2}", color:"#14B8A6" },
+  B2B_BUYER:{ label:"B2B_BUYER", desc:"Acheteur B2B", icon:"\u{1F6CD}\uFE0F", color:"#06B6D4" },
+  B2B_VIEWER:{ label:"B2B_VIEWER", desc:"Consultant B2B", icon:"\u{1F441}\uFE0F", color:"#64748B" },
+};
+
+const MENU_BY_ROLE = {
+  OWNER:["dashboard","orders","orders-new","quotes","customers","catalog","inventory","invoices","credit-notes","returns","pos","suppliers","admin-users","admin-settings","admin-pricing","admin-logs","exports"],
+  ADMIN:["admin-users","admin-settings","admin-pricing","admin-logs","suppliers","suppliers-api","products"],
+  MANAGER:["dashboard","orders","orders-new","quotes","customers","catalog","inventory","returns","invoices","credit-notes","pos"],
+  COMMERCIAL:["dashboard","catalog","orders-new","orders","quotes","customers","inventory","invoices","returns"],
+  COUNTER_AGENT:["pos","orders-new","orders","catalog","inventory"],
+  WAREHOUSE_KEEPER:["warehouse-deliveries","warehouse-receptions","inventory","inventory-receive","returns"],
+  ACCOUNTING:["invoices","credit-notes","exports","orders","returns"],
+  PURCHASER:["suppliers","supplier-orders","inventory-receive","purchase-orders"],
+  B2B_OWNER:["b2b-dashboard","b2b-catalog","b2b-orders","b2b-orders-new","b2b-invoices","b2b-users","b2b-profile"],
+  B2B_BUYER:["b2b-dashboard","b2b-catalog","b2b-orders","b2b-orders-new","b2b-invoices","b2b-profile"],
+  B2B_VIEWER:["b2b-dashboard","b2b-catalog","b2b-orders","b2b-invoices","b2b-profile"],
+};
+
+const SCREEN_META = {
+  "dashboard":{ label:"Dashboard", icon:"\u{1F4CA}", group:"General" },
+  "orders":{ label:"Commandes", icon:"\u{1F4CB}", group:"Ventes" },
+  "orders-new":{ label:"Nouvelle commande", icon:"\u2795", group:"Ventes" },
+  "quotes":{ label:"Devis", icon:"\u{1F4DD}", group:"Ventes" },
+  "customers":{ label:"Clients", icon:"\u{1F465}", group:"Ventes" },
+  "catalog":{ label:"Catalogue", icon:"\u{1F50D}", group:"Produits" },
+  "products":{ label:"Produits", icon:"\u{1F4E6}", group:"Produits" },
+  "inventory":{ label:"Stock", icon:"\u{1F3ED}", group:"Stock" },
+  "inventory-receive":{ label:"Reception stock", icon:"\u{1F4E5}", group:"Stock" },
+  "invoices":{ label:"Factures", icon:"\u{1F9FE}", group:"Finance" },
+  "credit-notes":{ label:"Avoirs", icon:"\u21A9\uFE0F", group:"Finance" },
+  "exports":{ label:"Exports", icon:"\u{1F4E4}", group:"Finance" },
+  "returns":{ label:"Retours", icon:"\u{1F504}", group:"SAV" },
+  "pos":{ label:"Caisse / POS", icon:"\u{1F3EA}", group:"POS" },
+  "suppliers":{ label:"Fournisseurs", icon:"\u{1F69B}", group:"Achats" },
+  "suppliers-api":{ label:"APIs Fournisseurs", icon:"\u{1F50C}", group:"Achats" },
+  "supplier-orders":{ label:"Cmd Fournisseurs", icon:"\u{1F4D1}", group:"Achats" },
+  "purchase-orders":{ label:"Bons commande", icon:"\u{1F4C4}", group:"Achats" },
+  "warehouse-deliveries":{ label:"Preparations", icon:"\u{1F4E6}", group:"Entrepot" },
+  "warehouse-receptions":{ label:"Receptions", icon:"\u{1F4E5}", group:"Entrepot" },
+  "admin-users":{ label:"Utilisateurs", icon:"\u{1F464}", group:"Admin" },
+  "admin-settings":{ label:"Parametres", icon:"\u2699\uFE0F", group:"Admin" },
+  "admin-pricing":{ label:"Grilles tarif.", icon:"\u{1F4B2}", group:"Admin" },
+  "admin-logs":{ label:"Logs audit", icon:"\u{1F4DC}", group:"Admin" },
+  "b2b-dashboard":{ label:"Tableau de bord", icon:"\u{1F4CA}", group:"Portail B2B" },
+  "b2b-catalog":{ label:"Catalogue", icon:"\u{1F50D}", group:"Portail B2B" },
+  "b2b-orders":{ label:"Mes commandes", icon:"\u{1F4CB}", group:"Portail B2B" },
+  "b2b-orders-new":{ label:"Commander", icon:"\u{1F6D2}", group:"Portail B2B" },
+  "b2b-invoices":{ label:"Mes factures", icon:"\u{1F9FE}", group:"Portail B2B" },
+  "b2b-users":{ label:"Utilisateurs", icon:"\u{1F465}", group:"Portail B2B" },
+  "b2b-profile":{ label:"Mon profil", icon:"\u{1F3E2}", group:"Portail B2B" },
+};
+
+/* ── Status colors ── */
+const statusColors = {
+  CREATED:{bg:"#DBEAFE",text:"#1E40AF"}, CONFIRMED:{bg:"#FEF3C7",text:"#92400E"},
+  PREPARING:{bg:"#FDE68A",text:"#78350F"}, READY:{bg:"#D1FAE5",text:"#065F46"},
+  DELIVERED:{bg:"#A7F3D0",text:"#047857"}, CANCELLED:{bg:"#FEE2E2",text:"#991B1B"},
+  DRAFT:{bg:"#E5E7EB",text:"#374151"}, SENT:{bg:"#DBEAFE",text:"#1E40AF"},
+  ACCEPTED:{bg:"#D1FAE5",text:"#065F46"}, CONVERTED:{bg:"#C4B5FD",text:"#5B21B6"},
+  EXPIRED:{bg:"#FEE2E2",text:"#991B1B"}, ISSUED:{bg:"#FEF3C7",text:"#92400E"},
+  PENDING:{bg:"#FEF3C7",text:"#92400E"}, APPROVED:{bg:"#DBEAFE",text:"#1E40AF"},
+  REJECTED:{bg:"#FEE2E2",text:"#991B1B"}, RECEIVED:{bg:"#D1FAE5",text:"#065F46"},
+  REFUNDED:{bg:"#C4B5FD",text:"#5B21B6"}, OPEN:{bg:"#D1FAE5",text:"#065F46"},
+  CLOSED:{bg:"#FEF3C7",text:"#92400E"}, VALIDATED:{bg:"#A7F3D0",text:"#047857"},
+};
+
+/* ══════════════════════════════════════════════════════════════
+   REUSABLE COMPONENTS
+   ══════════════════════════════════════════════════════════════ */
+function Badge({status}){ const c=statusColors[status]||{bg:"#E5E7EB",text:"#374151"}; return <span style={{background:c.bg,color:c.text,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:0.5,whiteSpace:"nowrap"}}>{status}</span>; }
+
+function Card({children,style,onClick}){ return <div className="fade-in" onClick={onClick} style={{background:"#fff",borderRadius:10,border:"1px solid #E5E7EB",padding:20,...style,cursor:onClick?"pointer":"default"}}>{children}</div>; }
+
+function StatCard({label,value,sub,color,icon}){ return (
+  <Card style={{flex:1,minWidth:155}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+      <div>
+        <div style={{fontSize:11,color:"#6B7280",fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>{label}</div>
+        <div style={{fontSize:24,fontWeight:800,color:color||"#111827",lineHeight:1.1}}>{value}</div>
+        {sub&&<div style={{fontSize:11,color:"#9CA3AF",marginTop:4}}>{sub}</div>}
+      </div>
+      <div style={{fontSize:26,opacity:0.6}}>{icon}</div>
+    </div>
+  </Card>
+); }
+
+function DataTable({columns,rows,onRowClick}){ return (
+  <div style={{overflowX:"auto",border:"1px solid #E5E7EB",borderRadius:8}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <thead><tr style={{background:"#F8FAFC"}}>
+        {columns.map((c,i)=><th key={i} style={{padding:"10px 14px",textAlign:"left",fontWeight:600,color:"#475569",borderBottom:"2px solid #E2E8F0",fontSize:11,textTransform:"uppercase",letterSpacing:0.5}}>{c.label}</th>)}
+      </tr></thead>
+      <tbody>
+        {rows.map((row,ri)=>(
+          <tr key={ri} onClick={()=>onRowClick&&onRowClick(row)} style={{cursor:onRowClick?"pointer":"default",borderBottom:"1px solid #F1F5F9",transition:"background 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            {columns.map((c,ci)=><td key={ci} style={{padding:"10px 14px",color:"#334155"}}>{c.render?c.render(row):row[c.key]}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+); }
+
+function SearchBar({placeholder,value,onChange}){ return (
+  <div style={{position:"relative",flex:1,maxWidth:400}}>
+    <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF",fontSize:14}}>\u{1F50D}</span>
+    <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      style={{width:"100%",padding:"10px 14px 10px 38px",border:"1px solid #D1D5DB",borderRadius:8,fontSize:14,outline:"none",background:"#fff",boxSizing:"border-box"}}/>
+  </div>
+); }
+
+function Btn({children,variant,onClick,style:s}){
+  const base={padding:"8px 18px",borderRadius:7,border:"none",fontWeight:600,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,transition:"opacity 0.15s"};
+  const v={primary:{...base,background:"#1B3A5C",color:"#fff"},success:{...base,background:"#059669",color:"#fff"},danger:{...base,background:"#DC2626",color:"#fff"},outline:{...base,background:"transparent",border:"1px solid #D1D5DB",color:"#374151"}};
+  return <button onClick={onClick} onMouseEnter={e=>e.currentTarget.style.opacity=0.85} onMouseLeave={e=>e.currentTarget.style.opacity=1} style={{...(v[variant]||v.primary),...s}}>{children}</button>;
+}
+
+function PageHeader({title,subtitle,actions}){ return (
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+    <div><h2 style={{margin:0,fontSize:22,fontWeight:800,color:"#0F172A"}}>{title}</h2>{subtitle&&<p style={{margin:"2px 0 0",fontSize:13,color:"#64748B"}}>{subtitle}</p>}</div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{actions}</div>
+  </div>
+); }
+
+function TabBar({tabs,active,onChange}){ return (
+  <div style={{display:"flex",gap:2,borderBottom:"2px solid #E5E7EB",marginBottom:16,overflowX:"auto"}}>
+    {tabs.map(t=>(<button key={t.key} onClick={()=>onChange(t.key)} style={{padding:"8px 18px",border:"none",background:active===t.key?"#fff":"transparent",borderBottom:active===t.key?"2px solid #1B3A5C":"2px solid transparent",fontWeight:active===t.key?700:400,color:active===t.key?"#1B3A5C":"#64748B",cursor:"pointer",fontSize:13,marginBottom:-2,whiteSpace:"nowrap"}}>{t.label}</button>))}
+  </div>
+); }
+
+function MiniChart({data,color,h=40,w=120}){ const max=Math.max(...data); const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-(v/max)*h}`).join(" "); return <svg width={w} height={h} style={{display:"block"}}><polyline points={pts} fill="none" stroke={color||"#3B82F6"} strokeWidth="2"/></svg>; }
+
+/* ══════════════════════════════════════════════════════════════
+   SCREENS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── DASHBOARD ── */
+function ScreenDashboard({role}){
+  const isOwner=role==="OWNER"||role==="MANAGER";
+  return (<div>
+    <PageHeader title="Tableau de bord" subtitle={`Vue ${isOwner?"direction":"operationnelle"} \u2014 5 fev. 2026`}/>
+    <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+      <StatCard label="CA du jour" value="2 456 \u20AC" sub="+12% vs hier" color="#059669" icon="\u{1F4B0}"/>
+      <StatCard label="Commandes" value="18" sub="5 en preparation" color="#1B3A5C" icon="\u{1F4E6}"/>
+      <StatCard label="Panier moyen" value="136 \u20AC" sub="+3% vs S-1" color="#7C3AED" icon="\u{1F6D2}"/>
+      <StatCard label="Marge brute" value={isOwner?"42.3%":"\u2014"} sub={isOwner?"Objectif: 40%":"Acces restreint"} color="#059669" icon="\u{1F4C8}"/>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
+      <Card>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"#0F172A"}}>Commandes recentes</div>
+        <DataTable columns={[{label:"N\u00B0",key:"id"},{label:"Client",key:"client"},{label:"Statut",render:r=><Badge status={r.status}/>},{label:"Total HT",render:r=><span style={{fontWeight:600}}>{r.total.toFixed(2)} \u20AC</span>}]} rows={ORDERS.slice(0,6)}/>
+      </Card>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <Card>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:10,color:"#0F172A"}}>Alertes stock bas</div>
+          {PRODUCTS.filter(p=>p.stock<=p.minStock).map(p=>(<div key={p.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #F1F5F9",fontSize:13}}><span style={{color:"#DC2626",fontWeight:600}}>\u26A0\uFE0F {p.name}</span><span style={{color:"#6B7280"}}>{p.stock}/{p.minStock}</span></div>))}
+        </Card>
+        <Card>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:10,color:"#0F172A"}}>Top ventes semaine</div>
+          {PRODUCTS.slice(0,4).map((p,i)=>(<div key={p.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #F1F5F9",fontSize:13}}><span><span style={{color:"#9CA3AF",marginRight:6}}>#{i+1}</span>{p.name}</span><MiniChart data={[3,5,4,7,6,8,9]} color="#10B981" w={60} h={20}/></div>))}
+        </Card>
+        <Card>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:6,color:"#0F172A"}}>CA hebdomadaire</div>
+          <MiniChart data={[1200,1800,1600,2100,1900,2400,2200]} color="#3B82F6" w={220} h={50}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9CA3AF",marginTop:4}}><span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span></div>
+        </Card>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ── ORDERS ── */
+function ScreenOrders(){
+  const [search,setSearch]=useState(""); const [tab,setTab]=useState("all");
+  const filtered=ORDERS.filter(o=>(tab==="all"||o.status===tab)&&(o.id.includes(search)||o.client.toLowerCase().includes(search.toLowerCase())));
+  return (<div>
+    <PageHeader title="Commandes" subtitle={`${ORDERS.length} commandes`} actions={<Btn variant="primary">\u2795 Nouvelle commande</Btn>}/>
+    <TabBar tabs={[{key:"all",label:"Toutes"},{key:"CONFIRMED",label:"Confirmees"},{key:"PREPARING",label:"En preparation"},{key:"READY",label:"Pretes"},{key:"DELIVERED",label:"Livrees"}]} active={tab} onChange={setTab}/>
+    <div style={{marginBottom:14}}><SearchBar placeholder="Rechercher par n\u00B0 ou client..." value={search} onChange={setSearch}/></div>
+    <DataTable columns={[
+      {label:"N\u00B0 Commande",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+      {label:"Client",key:"client"},
+      {label:"Source",render:r=><span style={{fontSize:11,padding:"2px 8px",background:r.source==="B2B"?"#DBEAFE":r.source==="POS"?"#FEF3C7":"#E5E7EB",borderRadius:10}}>{r.source}</span>},
+      {label:"Statut",render:r=><Badge status={r.status}/>},
+      {label:"Articles",key:"items"},
+      {label:"Total HT",render:r=><span style={{fontWeight:600}}>{r.total.toFixed(2)} \u20AC</span>},
+      {label:"Date",key:"date"},
+      {label:"",render:()=><span style={{color:"#9CA3AF",cursor:"pointer"}}>\u22EF</span>},
+    ]} rows={filtered}/>
+  </div>);
+}
+
+/* ── NEW ORDER + COMPARATOR ── */
+function ScreenNewOrder({isB2B}){
+  return (<div>
+    <PageHeader title={isB2B?"Passer commande":"Nouvelle commande"} subtitle="Recherchez des pieces, comparez les sources, ajoutez au panier"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:16}}>
+      <div>
+        <Card style={{marginBottom:14}}>
+          {!isB2B&&<div style={{marginBottom:14}}>
+            <label style={{fontSize:12,fontWeight:600,color:"#475569",display:"block",marginBottom:4}}>Client</label>
+            <select style={{width:"100%",padding:"8px 12px",border:"1px solid #D1D5DB",borderRadius:8,fontSize:14}}><option>Garage Martin SAS (PRO-15)</option><option>Auto Service Plus (PRO-10)</option><option>Client comptoir (Walk-in)</option></select>
+          </div>}
+          <label style={{fontSize:12,fontWeight:600,color:"#475569",display:"block",marginBottom:4}}>Recherche piece</label>
+          <div style={{display:"flex",gap:8}}><SearchBar placeholder="Reference, EAN, nom, vehicule..." value="" onChange={()=>{}}/><Btn variant="outline">\u{1F697} Recherche vehicule</Btn></div>
+        </Card>
+        <Card style={{marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:10,color:"#0F172A"}}>\u{1F50E} Resultats comparatifs \u2014 Plaquettes frein AV</div>
+          <div style={{overflowX:"auto",border:"1px solid #E5E7EB",borderRadius:8}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:"#F0F7FF"}}>
+                {["Source","Reference","Prix HT","Stock","Delai","Action"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:h==="Prix HT"?"right":h==="Stock"||h==="Delai"||h==="Action"?"center":"left",fontWeight:700,color:"#1B3A5C",fontSize:11,textTransform:"uppercase"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                <tr style={{background:"#F0FDF4",borderBottom:"1px solid #E5E7EB"}}>
+                  <td style={{padding:"10px 12px"}}><span style={{fontWeight:700,color:"#059669"}}>\u{1F3ED} Stock interne</span></td>
+                  <td style={{padding:"10px 12px"}}>BRK-PAD-4520</td>
+                  <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700}}>34.50 \u20AC</td>
+                  <td style={{padding:"10px 12px",textAlign:"center"}}><span style={{color:"#059669",fontWeight:600}}>45</span></td>
+                  <td style={{padding:"10px 12px",textAlign:"center"}}><span style={{color:"#059669"}}>Immediat</span></td>
+                  <td style={{padding:"10px 12px",textAlign:"center"}}><Btn variant="success" style={{padding:"5px 12px",fontSize:12}}>+ Ajouter</Btn></td>
+                </tr>
+                {[{name:"Alliance Auto.",ref:"AA-BP-4520",price:32.10,stock:120,delay:"D+1"},{name:"Autodistribution",ref:"AD-BP-4520",price:33.80,stock:85,delay:"D+1"},{name:"PHE Europe",ref:"PHE-4520-FR",price:31.50,stock:200,delay:"D+2"},{name:"Distrigo",ref:"DST-BP4520",price:35.20,stock:45,delay:"D+1"}].map((s,i)=>(
+                  <tr key={i} style={{borderBottom:"1px solid #F1F5F9"}}>
+                    <td style={{padding:"10px 12px"}}>\u{1F69B} {s.name}</td>
+                    <td style={{padding:"10px 12px",color:"#6B7280"}}>{s.ref}</td>
+                    <td style={{padding:"10px 12px",textAlign:"right",fontWeight:600}}>{s.price.toFixed(2)} \u20AC</td>
+                    <td style={{padding:"10px 12px",textAlign:"center"}}>{s.stock}</td>
+                    <td style={{padding:"10px 12px",textAlign:"center",color:"#92400E"}}>{s.delay}</td>
+                    <td style={{padding:"10px 12px",textAlign:"center"}}><Btn variant="outline" style={{padding:"5px 12px",fontSize:12}}>+ Ajouter</Btn></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+      <div>
+        <Card style={{position:"sticky",top:0}}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:14,color:"#0F172A"}}>\u{1F6D2} Panier</div>
+          <div style={{padding:"10px 0",borderBottom:"1px solid #F1F5F9"}}><div style={{fontWeight:600,fontSize:13}}>Plaquettes frein AV Bosch</div><div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#6B7280",marginTop:4}}><span>Qty: 2 \u00D7 34.50 \u20AC</span><span style={{fontWeight:700,color:"#0F172A"}}>69.00 \u20AC</span></div><span style={{fontSize:10,padding:"1px 6px",background:"#D1FAE5",borderRadius:8}}>Stock interne</span></div>
+          <div style={{borderTop:"2px solid #E5E7EB",marginTop:12,paddingTop:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span>Sous-total HT</span><span style={{fontWeight:600}}>69.00 \u20AC</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span>TVA 20%</span><span>13.80 \u20AC</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:16,fontWeight:800,marginTop:8,color:"#1B3A5C"}}><span>Total TTC</span><span>82.80 \u20AC</span></div>
+          </div>
+          <Btn variant="primary" style={{width:"100%",marginTop:14,justifyContent:"center",padding:"12px"}}>\u2705 Valider la commande</Btn>
+        </Card>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ── CATALOG ── */
+function ScreenCatalog({isB2B}){
+  const [search,setSearch]=useState(""); const [mode,setMode]=useState("ref");
+  return (<div>
+    <PageHeader title={isB2B?"Catalogue pieces":"Catalogue & Recherche"} subtitle="Recherche par reference, EAN, nom ou vehicule (TecCom)"/>
+    <Card style={{marginBottom:14}}>
+      <TabBar tabs={[{key:"ref",label:"Reference / EAN"},{key:"vehicle",label:"\u{1F697} Vehicule (TecCom)"},{key:"category",label:"Categorie"}]} active={mode} onChange={setMode}/>
+      {mode==="vehicle"?(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:10,alignItems:"end"}}>
+        <div><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:4}}>Marque</label><select style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6}}><option>Renault</option><option>Peugeot</option><option>Volkswagen</option></select></div>
+        <div><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:4}}>Modele</label><select style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6}}><option>Clio IV</option><option>Megane III</option></select></div>
+        <div><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:4}}>Annee</label><select style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6}}><option>2019</option><option>2020</option></select></div>
+        <div><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:4}}>Moteur</label><select style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6}}><option>1.5 dCi 90ch</option><option>1.2 TCe 130ch</option></select></div>
+        <Btn variant="primary">Rechercher</Btn>
+      </div>):(<SearchBar placeholder="Saisir reference, code EAN ou nom du produit..." value={search} onChange={setSearch}/>)}
+    </Card>
+    <DataTable columns={[
+      {label:"Ref",render:r=><span style={{fontFamily:"monospace",fontWeight:700,color:"#1B3A5C"}}>{r.ref}</span>},
+      {label:"EAN",render:r=><span style={{fontFamily:"monospace",fontSize:11,color:"#6B7280"}}>{r.ean}</span>},
+      {label:"Designation",key:"name"},{label:"Marque",key:"brand"},{label:"Cat.",key:"cat"},
+      {label:"Prix HT",render:r=><span style={{fontWeight:600}}>{isB2B?(r.priceHT*0.85).toFixed(2):r.priceHT.toFixed(2)} \u20AC</span>},
+      {label:"Stock",render:r=><span style={{color:r.stock<=r.minStock?"#DC2626":"#059669",fontWeight:600}}>{r.stock}</span>},
+      {label:"",render:()=><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Voir</Btn>},
+    ]} rows={PRODUCTS}/>
+  </div>);
+}
+
+/* ── POS ── */
+function ScreenPOS(){
+  return (<div>
+    <PageHeader title="Caisse \u2014 Point de Vente" subtitle="Session ouverte 08:02 \u2014 Fond de caisse: 200.00 \u20AC" actions={<Btn variant="danger">\u{1F512} Cloturer caisse</Btn>}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 380px",gap:16}}>
+      <div>
+        <Card style={{marginBottom:14}}>
+          <div style={{display:"flex",gap:8,marginBottom:14}}><SearchBar placeholder="Scanner code-barres ou rechercher..." value="" onChange={()=>{}}/><Btn variant="outline">\u{1F697} Vehicule</Btn></div>
+          <DataTable columns={[{label:"Produit",key:"name"},{label:"Ref",key:"ref"},{label:"Prix",render:r=>r.priceHT.toFixed(2)+" \u20AC"},{label:"Stock",render:r=><span style={{color:r.stock>10?"#059669":"#DC2626"}}>{r.stock}</span>},{label:"",render:()=><Btn variant="success" style={{padding:"4px 10px",fontSize:11}}>+ Ajouter</Btn>}]} rows={PRODUCTS.slice(0,5)}/>
+        </Card>
+      </div>
+      <div>
+        <Card style={{background:"#0F172A",color:"#fff"}}>
+          <div style={{fontSize:12,color:"#94A3B8",marginBottom:4}}>Client</div>
+          <select style={{width:"100%",padding:8,borderRadius:6,border:"1px solid #334155",background:"#1E293B",color:"#fff",marginBottom:14}}><option>Client comptoir (Walk-in)</option><option>Garage Martin SAS (B2B)</option></select>
+          <div style={{borderBottom:"1px solid #334155",paddingBottom:10,marginBottom:10}}>
+            {[{name:"Plaquettes frein AV Bosch",qty:1,price:34.50},{name:"Filtre huile Mann",qty:2,price:12.80}].map((it,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1E293B"}}><div><div style={{fontWeight:600,fontSize:13}}>{it.name}</div><div style={{fontSize:11,color:"#94A3B8"}}>Qty: {it.qty}</div></div><div style={{fontWeight:700}}>{(it.qty*it.price).toFixed(2)} \u20AC</div></div>))}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span style={{color:"#94A3B8"}}>Sous-total HT</span><span>60.10 \u20AC</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}><span style={{color:"#94A3B8"}}>TVA 20%</span><span>12.02 \u20AC</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:24,fontWeight:800,padding:"10px 0",borderTop:"2px solid #334155"}}><span>TOTAL TTC</span><span style={{color:"#34D399"}}>72.12 \u20AC</span></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+            <button style={{padding:14,borderRadius:8,border:"none",background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}}>\u{1F4B3} CB</button>
+            <button style={{padding:14,borderRadius:8,border:"none",background:"#059669",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}}>\u{1F4B6} Especes</button>
+          </div>
+          <button style={{width:"100%",padding:10,borderRadius:8,border:"1px solid #475569",background:"transparent",color:"#94A3B8",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8}}>Paiement mixte / Avoir</button>
+        </Card>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ── INVOICES ── */
+function ScreenInvoices({isB2B}){ return (<div>
+  <PageHeader title={isB2B?"Mes factures":"Factures"} subtitle="Factures generees automatiquement a la livraison" actions={!isB2B&&<Btn variant="outline">\u{1F4E4} Export CSV</Btn>}/>
+  <DataTable columns={[
+    {label:"N\u00B0 Facture",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+    {label:"Commande",key:"order"},
+    ...(!isB2B?[{label:"Client",key:"client"}]:[]),
+    {label:"Total TTC",render:r=><span style={{fontWeight:600}}>{r.total.toFixed(2)} \u20AC</span>},
+    {label:"Statut",render:r=><Badge status={r.status}/>},
+    {label:"PDP",render:r=><span style={{fontSize:11,color:r.pdp==="Transmise"?"#059669":r.pdp==="Recue"?"#7C3AED":"#92400E"}}>{r.pdp}</span>},
+    {label:"Date",key:"date"},
+    {label:"",render:()=><div style={{display:"flex",gap:6}}><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>PDF</Btn>{!isB2B&&<Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Envoyer</Btn>}</div>},
+  ]} rows={INVOICES}/>
+</div>); }
+
+/* ── CUSTOMERS ── */
+function ScreenCustomers(){ return (<div>
+  <PageHeader title="Clients" subtitle={`${CUSTOMERS.length} clients B2B actifs`} actions={<Btn variant="primary">\u2795 Nouveau client</Btn>}/>
+  <div style={{marginBottom:14}}><SearchBar placeholder="Rechercher un client..." value="" onChange={()=>{}}/></div>
+  <DataTable columns={[
+    {label:"Nom",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.name}</span>},
+    {label:"Grille",render:r=><span style={{fontFamily:"monospace",fontSize:12,background:"#F1F5F9",padding:"2px 6px",borderRadius:4}}>{r.grid}</span>},
+    {label:"Ville",key:"city"},{label:"Commandes",key:"orders"},
+    {label:"CA total",render:r=><span style={{fontWeight:600}}>{r.ca.toLocaleString()} \u20AC</span>},
+    {label:"",render:()=><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Voir</Btn>},
+  ]} rows={CUSTOMERS}/>
+</div>); }
+
+/* ── QUOTES ── */
+function ScreenQuotes(){ return (<div>
+  <PageHeader title="Devis" subtitle="Creez, envoyez et convertissez vos devis" actions={<Btn variant="primary">\u2795 Nouveau devis</Btn>}/>
+  <DataTable columns={[
+    {label:"N\u00B0 Devis",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+    {label:"Client",key:"client"},{label:"Statut",render:r=><Badge status={r.status}/>},
+    {label:"Total HT",render:r=><span style={{fontWeight:600}}>{r.total.toFixed(2)} \u20AC</span>},
+    {label:"Date",key:"date"},{label:"Valide jusqu'au",key:"validUntil"},
+    {label:"",render:r=><div style={{display:"flex",gap:4}}>{r.status==="DRAFT"&&<Btn variant="primary" style={{padding:"4px 10px",fontSize:11}}>Envoyer</Btn>}{r.status==="ACCEPTED"&&<Btn variant="success" style={{padding:"4px 10px",fontSize:11}}>Convertir</Btn>}</div>},
+  ]} rows={QUOTES}/>
+</div>); }
+
+/* ── INVENTORY ── */
+function ScreenInventory(){ return (<div>
+  <PageHeader title="Gestion du stock" subtitle="Stock interne \u2014 Entrepot principal" actions={<><Btn variant="outline">\u{1F4E5} Reception</Btn><Btn variant="primary">\u2696\uFE0F Ajustement</Btn></>}/>
+  <div style={{display:"flex",gap:14,marginBottom:14,flexWrap:"wrap"}}>
+    <StatCard label="References en stock" value={PRODUCTS.length} icon="\u{1F4E6}"/>
+    <StatCard label="Valeur stock (cout)" value="18 420 \u20AC" icon="\u{1F4B0}"/>
+    <StatCard label="Alertes stock bas" value={PRODUCTS.filter(p=>p.stock<=p.minStock).length} color="#DC2626" icon="\u26A0\uFE0F"/>
+  </div>
+  <DataTable columns={[
+    {label:"Ref",render:r=><span style={{fontFamily:"monospace",fontWeight:700}}>{r.ref}</span>},
+    {label:"Designation",key:"name"},{label:"Marque",key:"brand"},
+    {label:"Stock",render:r=><span style={{fontWeight:700,color:r.stock<=r.minStock?"#DC2626":"#059669"}}>{r.stock}</span>},
+    {label:"Seuil",key:"minStock"},
+    {label:"Cout unit.",render:r=>r.costHT.toFixed(2)+" \u20AC"},
+    {label:"Valeur",render:r=><span style={{fontWeight:600}}>{(r.stock*r.costHT).toFixed(2)} \u20AC</span>},
+    {label:"Statut",render:r=>r.stock<=r.minStock?<span style={{color:"#DC2626",fontWeight:600}}>\u26A0\uFE0F BAS</span>:<span style={{color:"#059669"}}>\u2705 OK</span>},
+  ]} rows={PRODUCTS}/>
+</div>); }
+
+/* ── RETURNS ── */
+function ScreenReturns(){ return (<div>
+  <PageHeader title="Retours clients" subtitle="Gestion des demandes de retour" actions={<Btn variant="primary">\u2795 Nouveau retour</Btn>}/>
+  <DataTable columns={[
+    {label:"N\u00B0 Retour",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+    {label:"Commande",key:"order"},{label:"Client",key:"client"},
+    {label:"Statut",render:r=><Badge status={r.status}/>},
+    {label:"Motif",key:"reason"},{label:"Date",key:"date"},
+    {label:"",render:r=><div style={{display:"flex",gap:4}}>{r.status==="APPROVED"&&<Btn variant="primary" style={{padding:"4px 10px",fontSize:11}}>Receptionner</Btn>}{r.status==="RECEIVED"&&<Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Generer avoir</Btn>}</div>},
+  ]} rows={RETURNS}/>
+</div>); }
+
+/* ── WAREHOUSE ── */
+function ScreenWarehouse({type}){
+  const isDel=type==="deliveries";
+  const items=isDel?[
+    {id:"CMD-2026-00141",client:"Auto Service Plus",status:"READY",items:3,priority:"Haute"},
+    {id:"CMD-2026-00139",client:"MecaPro SARL",status:"PREPARING",items:8,priority:"Normale"},
+    {id:"CMD-2026-00138",client:"Garage du Pont",status:"CONFIRMED",items:4,priority:"Normale"},
+  ]:[
+    {id:"SO-2026-00045",supplier:"Alliance Automotive",status:"READY",items:12,eta:"2026-02-05"},
+    {id:"SO-2026-00044",supplier:"Autodistribution",status:"CONFIRMED",items:5,eta:"2026-02-06"},
+  ];
+  return (<div>
+    <PageHeader title={isDel?"Preparations & Livraisons":"Receptions fournisseurs"} subtitle={isDel?"Commandes a preparer et livrer":"Commandes fournisseurs a receptionner"}/>
+    <DataTable columns={isDel?[
+      {label:"Commande",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+      {label:"Client",key:"client"},{label:"Statut",render:r=><Badge status={r.status}/>},
+      {label:"Articles",key:"items"},{label:"Priorite",key:"priority"},
+      {label:"",render:r=><div style={{display:"flex",gap:4}}>
+        {r.status==="CONFIRMED"&&<Btn variant="primary" style={{padding:"4px 10px",fontSize:11}}>Preparer</Btn>}
+        {r.status==="PREPARING"&&<Btn variant="success" style={{padding:"4px 10px",fontSize:11}}>Marquer Pret</Btn>}
+        {r.status==="READY"&&<Btn variant="success" style={{padding:"4px 10px",fontSize:11}}>Livrer</Btn>}
+      </div>},
+    ]:[
+      {label:"Cmd Fournisseur",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+      {label:"Fournisseur",key:"supplier"},{label:"Statut",render:r=><Badge status={r.status}/>},
+      {label:"Articles",key:"items"},{label:"ETA",key:"eta"},
+      {label:"",render:r=>r.status==="READY"&&<Btn variant="primary" style={{padding:"4px 10px",fontSize:11}}>Receptionner</Btn>},
+    ]} rows={items}/>
+  </div>);
+}
+
+/* ── SUPPLIERS ── */
+function ScreenSuppliers(){ return (<div>
+  <PageHeader title="Fournisseurs" subtitle="5 connecteurs API configures" actions={<Btn variant="primary">\u2795 Ajouter</Btn>}/>
+  <DataTable columns={[
+    {label:"Fournisseur",render:r=><span style={{fontWeight:700,color:"#1B3A5C"}}>{r.name}</span>},
+    {label:"Type API",render:r=><span style={{fontFamily:"monospace",background:r.type==="REST"?"#DBEAFE":"#FEF3C7",padding:"2px 8px",borderRadius:4,fontSize:11}}>{r.type}</span>},
+    {label:"Statut",render:r=><span style={{color:r.status==="active"?"#059669":"#F59E0B",fontWeight:600}}>{r.status==="active"?"\u2705 Actif":"\u26A0\uFE0F Instable"}</span>},
+    {label:"Priorite",key:"priority"},
+    {label:"",render:()=><div style={{display:"flex",gap:4}}><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Config API</Btn><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Tester</Btn></div>},
+  ]} rows={SUPPLIERS}/>
+</div>); }
+
+/* ── ADMIN USERS ── */
+function ScreenAdminUsers(){
+  const users=[
+    {name:"Max (Owner)",email:"max@mecadepot.fr",role:"OWNER",status:"Actif",lastLogin:"2026-02-05 08:30"},
+    {name:"Sophie Leroy",email:"sophie@mecadepot.fr",role:"MANAGER",status:"Actif",lastLogin:"2026-02-05 07:45"},
+    {name:"Julien Moreau",email:"julien@mecadepot.fr",role:"COMMERCIAL",status:"Actif",lastLogin:"2026-02-04 17:20"},
+    {name:"Ahmed Benali",email:"ahmed@mecadepot.fr",role:"COUNTER_AGENT",status:"Actif",lastLogin:"2026-02-05 08:00"},
+    {name:"Pierre Dupont",email:"pierre@mecadepot.fr",role:"WAREHOUSE_KEEPER",status:"Actif",lastLogin:"2026-02-05 06:30"},
+    {name:"Marie Laurent",email:"marie@mecadepot.fr",role:"ACCOUNTING",status:"Actif",lastLogin:"2026-02-04 16:00"},
+    {name:"Thomas Garcia",email:"thomas@mecadepot.fr",role:"PURCHASER",status:"Actif",lastLogin:"2026-02-04 14:30"},
+    {name:"Jean Martin (B2B)",email:"jean@garagemartin.fr",role:"B2B_OWNER",status:"Actif",lastLogin:"2026-02-05 09:00"},
+  ];
+  return (<div>
+    <PageHeader title="Gestion des utilisateurs" subtitle="11 roles systeme \u2014 8 utilisateurs actifs" actions={<Btn variant="primary">\u2795 Nouvel utilisateur</Btn>}/>
+    <DataTable columns={[
+      {label:"Nom",render:r=><span style={{fontWeight:600}}>{r.name}</span>},{label:"Email",key:"email"},
+      {label:"Role",render:r=><span style={{fontSize:11,padding:"2px 8px",background:(ROLES[r.role]?.color||"#666")+"22",color:ROLES[r.role]?.color,borderRadius:10,fontWeight:700}}>{ROLES[r.role]?.icon} {r.role}</span>},
+      {label:"Statut",render:r=><span style={{color:"#059669",fontWeight:600}}>\u25CF {r.status}</span>},
+      {label:"Derniere connexion",key:"lastLogin"},
+      {label:"",render:()=><div style={{display:"flex",gap:4}}><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Modifier</Btn></div>},
+    ]} rows={users}/>
+  </div>);
+}
+
+/* ── ADMIN SETTINGS ── */
+function ScreenAdminSettings(){ return (<div>
+  <PageHeader title="Parametres systeme" subtitle="Configuration generale de l'ERP"/>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+    <Card>
+      <h3 style={{margin:"0 0 14px",fontSize:15,color:"#0F172A"}}>\u{1F3E2} Informations entreprise</h3>
+      {[["Raison sociale","MECADEPOT SAS"],["SIRET","123 456 789 00012"],["TVA Intra.","FR12345678900"],["Adresse","Zone Industrielle, Saint-Antoine"]].map(([l,v])=>(
+        <div key={l} style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:2}}>{l}</label><input defaultValue={v} style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      ))}
+    </Card>
+    <Card>
+      <h3 style={{margin:"0 0 14px",fontSize:15,color:"#0F172A"}}>\u2699\uFE0F Configuration</h3>
+      {[["Taux TVA","20%"],["Prefixe factures","INV-"],["Prefixe avoirs","CRN-"],["Seuil ecart caisse (\u20AC)","5.00"],["Validite devis (jours)","30"]].map(([l,v])=>(
+        <div key={l} style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:2}}>{l}</label><input defaultValue={v} style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      ))}
+    </Card>
+    <Card>
+      <h3 style={{margin:"0 0 14px",fontSize:15,color:"#0F172A"}}>\u{1F50C} PDP (Facturation electronique)</h3>
+      <div style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:"#64748B"}}>Plateforme</label><select style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,marginTop:2}}><option>Pennylane</option><option>Tiime</option><option>Sage</option></select></div>
+      <div style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:"#64748B"}}>API Key</label><input type="password" defaultValue="pk_live_xxxxxxxxxxxxx" style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      <span style={{color:"#059669",fontWeight:600,fontSize:13}}>\u2705 Connexion PDP active</span>
+    </Card>
+    <Card>
+      <h3 style={{margin:"0 0 14px",fontSize:15,color:"#0F172A"}}>\u{1F4B3} Stripe (Paiement)</h3>
+      {[["Publishable Key","pk_live_..."],["Secret Key","sk_live_..."],["Webhook Secret","whsec_..."]].map(([l,v])=>(
+        <div key={l} style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:"#64748B"}}>{l}</label><input type="password" defaultValue={v} style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      ))}
+      <span style={{color:"#059669",fontWeight:600,fontSize:13}}>\u2705 Stripe connecte</span>
+    </Card>
+  </div>
+</div>); }
+
+/* ── LOGS ── */
+function ScreenLogs(){
+  const logs=[
+    {time:"08:32:15",user:"Max",action:"LOGIN",entity:"Session",detail:"Connexion reussie",ip:"82.67.xxx.12"},
+    {time:"08:30:42",user:"Ahmed",action:"POS_OPEN",entity:"Caisse #1",detail:"Ouverture caisse 200\u20AC",ip:"192.168.1.50"},
+    {time:"08:28:10",user:"Pierre",action:"DELIVER",entity:"CMD-2026-00142",detail:"READY \u2192 DELIVERED",ip:"192.168.1.31"},
+    {time:"08:25:03",user:"Julien",action:"DISCOUNT",entity:"CMD-2026-00141",detail:"5% - Negociation volume",ip:"192.168.1.22"},
+    {time:"08:20:45",user:"Sophie",action:"RETURN_APPROVE",entity:"RET-2026-00012",detail:"Retour approuve",ip:"192.168.1.15"},
+    {time:"08:15:22",user:"Systeme",action:"INVOICE_GEN",entity:"INV-2026-00089",detail:"Facture auto-generee",ip:"\u2014"},
+  ];
+  return (<div>
+    <PageHeader title="Logs d'audit" subtitle="Toutes les actions tracees \u2014 Conservation 2 ans" actions={<Btn variant="outline">\u{1F4E4} Export CSV</Btn>}/>
+    <Card style={{marginBottom:14}}>
+      <div style={{display:"flex",gap:10}}><SearchBar placeholder="Filtrer par utilisateur, action..." value="" onChange={()=>{}}/><select style={{padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13}}><option>Toutes actions</option><option>LOGIN</option><option>DISCOUNT</option></select><input type="date" defaultValue="2026-02-05" style={{padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13}}/></div>
+    </Card>
+    <DataTable columns={[
+      {label:"Heure",render:r=><span style={{fontFamily:"monospace",fontSize:12}}>{r.time}</span>},
+      {label:"Utilisateur",render:r=><span style={{fontWeight:600}}>{r.user}</span>},
+      {label:"Action",render:r=><span style={{fontFamily:"monospace",fontSize:11,background:"#F1F5F9",padding:"2px 6px",borderRadius:4}}>{r.action}</span>},
+      {label:"Entite",key:"entity"},{label:"Detail",key:"detail"},{label:"IP",key:"ip"},
+    ]} rows={logs}/>
+  </div>);
+}
+
+/* ── EXPORTS ── */
+function ScreenExports(){ return (<div>
+  <PageHeader title="Exports comptables" subtitle="Exports CSV, FEC et rapports"/>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+    {[{icon:"\u{1F9FE}",title:"Export factures",desc:"CSV factures de la periode",btn:"Generer CSV"},{icon:"\u{1F4CB}",title:"Export commandes",desc:"CSV detail des commandes",btn:"Generer CSV"},{icon:"\u{1F4CA}",title:"FEC (V3)",desc:"Fichier Ecritures Comptables DGFiP",btn:"Generer FEC"},{icon:"\u{1F4C8}",title:"CA par client",desc:"Chiffre d'affaires par client",btn:"Generer"},{icon:"\u{1F4B0}",title:"Marges produits",desc:"Analyse des marges par produit",btn:"Generer"},{icon:"\u{1F504}",title:"Avoirs emis",desc:"Liste des avoirs avec ref factures",btn:"Generer"}].map((exp,i)=>(
+      <Card key={i} style={{textAlign:"center"}}>
+        <div style={{fontSize:32,marginBottom:8}}>{exp.icon}</div>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{exp.title}</div>
+        <div style={{fontSize:12,color:"#6B7280",marginBottom:12}}>{exp.desc}</div>
+        <Btn variant="primary" style={{width:"100%",justifyContent:"center"}}>{exp.btn}</Btn>
+      </Card>
+    ))}
+  </div>
+</div>); }
+
+/* ── CREDIT NOTES ── */
+function ScreenCreditNotes(){ return (<div>
+  <PageHeader title="Avoirs" subtitle="Avoirs emis (retours et gestes commerciaux)" actions={<Btn variant="primary">\u2795 Nouvel avoir</Btn>}/>
+  <DataTable columns={[
+    {label:"N\u00B0 Avoir",render:()=><span style={{fontWeight:700,color:"#1B3A5C"}}>CRN-2026-00015</span>},
+    {label:"Facture liee",render:()=>"INV-2026-00082"},{label:"Client",render:()=>"MecaPro SARL"},
+    {label:"Montant",render:()=><span style={{fontWeight:600,color:"#DC2626"}}>-156.00 \u20AC</span>},
+    {label:"Type",render:()=><span style={{fontSize:11,background:"#E5E7EB",padding:"2px 6px",borderRadius:4}}>Retour client</span>},
+    {label:"Date",render:()=>"2026-01-28"},
+    {label:"",render:()=><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>PDF</Btn>},
+  ]} rows={[{}]}/>
+</div>); }
+
+/* ── ADMIN PRICING ── */
+function ScreenAdminPricing(){
+  const grids=[{id:"PRO-20",name:"Pro Premium (-20%)",clients:2,rules:"Global -20%, Freinage -25%"},{id:"PRO-15",name:"Pro Standard (-15%)",clients:5,rules:"Global -15%"},{id:"PRO-10",name:"Pro Decouverte (-10%)",clients:8,rules:"Global -10%"},{id:"STD",name:"Tarif public",clients:12,rules:"Aucune remise"}];
+  return (<div>
+    <PageHeader title="Grilles tarifaires" subtitle="Configuration des prix par client/groupe" actions={<Btn variant="primary">\u2795 Nouvelle grille</Btn>}/>
+    <DataTable columns={[
+      {label:"Code",render:r=><span style={{fontFamily:"monospace",fontWeight:700,color:"#1B3A5C"}}>{r.id}</span>},
+      {label:"Nom",key:"name"},{label:"Clients",key:"clients"},{label:"Regles",key:"rules"},
+      {label:"",render:()=><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Modifier</Btn>},
+    ]} rows={grids}/>
+  </div>);
+}
+
+/* ── SUPPLIER API ── */
+function ScreenSupplierAPI(){ return (<div>
+  <PageHeader title="Configuration API Fournisseur" subtitle="Alliance Automotive \u2014 Connecteur REST"/>
+  <Card>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {[["Type","REST"],["Endpoint","https://api.alliance-auto.com/v2"],["Timeout","3000 ms"],["Priorite","1"]].map(([l,v])=>(
+        <div key={l}><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:2}}>{l}</label><input defaultValue={v} style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      ))}
+      <div><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:2}}>API Key</label><input type="password" defaultValue="ak_xxxx" style={{width:"100%",padding:8,border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,boxSizing:"border-box"}}/></div>
+      <div style={{display:"flex",alignItems:"end"}}><Btn variant="success">\u{1F50C} Tester la connexion</Btn></div>
+    </div>
+    <div style={{marginTop:14,padding:10,background:"#F0FDF4",borderRadius:6,fontSize:13,color:"#059669"}}>\u2705 Derniere connexion reussie: 2026-02-05 08:15 \u2014 Temps: 245ms</div>
+  </Card>
+</div>); }
+
+/* ── PURCHASE ORDERS ── */
+function ScreenPurchaseOrders(){ return (<div>
+  <PageHeader title="Bons de commande achat (V2)" subtitle="Gestion des achats avec workflow d'approbation" actions={<Btn variant="primary">\u2795 Nouveau BC</Btn>}/>
+  <div style={{padding:14,background:"#FEF3C7",borderRadius:8,marginBottom:14,fontSize:13,color:"#92400E"}}>\u{1F4CC} Module V2 \u2014 Workflow: DRAFT \u2192 SUBMITTED \u2192 APPROVED \u2192 ORDERED \u2192 RECEIVED</div>
+  <DataTable columns={[
+    {label:"N\u00B0 BC",render:()=><span style={{fontWeight:700,color:"#1B3A5C"}}>PO-2026-00023</span>},
+    {label:"Fournisseur",render:()=>"Alliance Automotive"},
+    {label:"Statut",render:()=><Badge status="DRAFT"/>},
+    {label:"Lignes",render:()=>"8"},
+    {label:"Total HT",render:()=><span style={{fontWeight:600}}>2 340.00 \u20AC</span>},
+    {label:"",render:()=><Btn variant="primary" style={{padding:"4px 10px",fontSize:11}}>Soumettre</Btn>},
+  ]} rows={[{}]}/>
+</div>); }
+
+/* ── B2B DASHBOARD ── */
+function ScreenB2BDashboard(){ return (<div>
+  <PageHeader title="Bienvenue, Garage Martin SAS" subtitle="Votre espace professionnel MECADEPOT"/>
+  <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+    <StatCard label="Commandes ce mois" value="12" icon="\u{1F4E6}"/><StatCard label="En cours" value="3" color="#F59E0B" icon="\u{1F504}"/><StatCard label="Factures impayees" value="1" color="#DC2626" icon="\u{1F9FE}"/><StatCard label="Total du mois" value="4 560 \u20AC" color="#059669" icon="\u{1F4B0}"/>
+  </div>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+    <Card>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>Dernieres commandes</div>
+      <DataTable columns={[{label:"N\u00B0",render:r=><span style={{fontWeight:600,color:"#1B3A5C"}}>{r.id}</span>},{label:"Statut",render:r=><Badge status={r.status}/>},{label:"Total",render:r=>r.total.toFixed(2)+" \u20AC"}]} rows={ORDERS.filter(o=>o.client==="Garage Martin SAS").slice(0,3)}/>
+    </Card>
+    <Card>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>Actions rapides</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <Btn variant="primary" style={{justifyContent:"center"}}>\u{1F6D2} Passer une commande</Btn>
+        <Btn variant="outline" style={{justifyContent:"center"}}>\u{1F50D} Rechercher une piece</Btn>
+        <Btn variant="outline" style={{justifyContent:"center"}}>\u{1F9FE} Voir mes factures</Btn>
+      </div>
+    </Card>
+  </div>
+</div>); }
+
+/* ── B2B USERS ── */
+function ScreenB2BUsers(){ return (<div>
+  <PageHeader title="Utilisateurs de mon entreprise" subtitle="Gerez les acces de vos collaborateurs" actions={<Btn variant="primary">\u2795 Ajouter</Btn>}/>
+  <DataTable columns={[{label:"Nom",render:()=><span style={{fontWeight:600}}>Jean Martin</span>},{label:"Email",render:()=>"jean@garagemartin.fr"},{label:"Role",render:()=><Badge status="APPROVED"/>},{label:"Dernier acces",render:()=>"2026-02-05 09:00"},{label:"",render:()=><Btn variant="outline" style={{padding:"4px 10px",fontSize:11}}>Modifier</Btn>}]} rows={[{},{}]}/>
+  <div style={{marginTop:10,fontSize:12,color:"#64748B"}}>\u2139\uFE0F Vous pouvez ajouter des B2B_BUYER ou B2B_VIEWER</div>
+</div>); }
+
+/* ── B2B PROFILE ── */
+function ScreenB2BProfile(){ return (<div>
+  <PageHeader title="Profil entreprise" subtitle="Informations de votre compte professionnel"/>
+  <Card>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {[["Raison sociale","Garage Martin SAS"],["SIRET","987 654 321 00045"],["Grille tarifaire","PRO-15 (-15%)"],["Email","contact@garagemartin.fr"],["Adresse","12 rue des Ateliers, Saint-Antoine"],["Telephone","04 76 XX XX XX"]].map(([l,v])=>(
+        <div key={l}><label style={{fontSize:11,fontWeight:600,color:"#64748B",display:"block",marginBottom:2}}>{l}</label><div style={{fontSize:14,fontWeight:500,color:"#0F172A"}}>{v}</div></div>
+      ))}
+    </div>
+  </Card>
+</div>); }
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN ROUTER
+   ══════════════════════════════════════════════════════════════ */
+function ScreenRouter({screen,role}){
+  const isB2B=role.startsWith("B2B");
+  const map={
+    "dashboard":<ScreenDashboard role={role}/>,"orders":<ScreenOrders/>,"orders-new":<ScreenNewOrder isB2B={false}/>,"quotes":<ScreenQuotes/>,
+    "customers":<ScreenCustomers/>,"catalog":<ScreenCatalog isB2B={false}/>,"products":<ScreenCatalog isB2B={false}/>,"inventory":<ScreenInventory/>,
+    "inventory-receive":<ScreenWarehouse type="receptions"/>,"invoices":<ScreenInvoices isB2B={false}/>,"credit-notes":<ScreenCreditNotes/>,
+    "exports":<ScreenExports/>,"returns":<ScreenReturns/>,"pos":<ScreenPOS/>,"suppliers":<ScreenSuppliers/>,"suppliers-api":<ScreenSupplierAPI/>,
+    "supplier-orders":<ScreenWarehouse type="receptions"/>,"purchase-orders":<ScreenPurchaseOrders/>,
+    "warehouse-deliveries":<ScreenWarehouse type="deliveries"/>,"warehouse-receptions":<ScreenWarehouse type="receptions"/>,
+    "admin-users":<ScreenAdminUsers/>,"admin-settings":<ScreenAdminSettings/>,"admin-pricing":<ScreenAdminPricing/>,"admin-logs":<ScreenLogs/>,
+    "b2b-dashboard":<ScreenB2BDashboard/>,"b2b-catalog":<ScreenCatalog isB2B={true}/>,"b2b-orders":<ScreenOrders/>,
+    "b2b-orders-new":<ScreenNewOrder isB2B={true}/>,"b2b-invoices":<ScreenInvoices isB2B={true}/>,"b2b-users":<ScreenB2BUsers/>,"b2b-profile":<ScreenB2BProfile/>,
+  };
+  return map[screen]||<div style={{padding:40,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:48,marginBottom:16}}>\u{1F6A7}</div><div style={{fontSize:18,fontWeight:600}}>Ecran en construction</div></div>;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MAIN APP
+   ══════════════════════════════════════════════════════════════ */
+function App(){
+  const [role,setRole]=useState("OWNER");
+  const [screen,setScreen]=useState("dashboard");
+  const [collapsed,setCollapsed]=useState(false);
+  const menu=MENU_BY_ROLE[role]||[];
+  const isB2B=role.startsWith("B2B");
+
+  useEffect(()=>{ const first=menu[0]; if(first) setScreen(first); },[role]);
+
+  const groups={};
+  menu.forEach(key=>{ const m=SCREEN_META[key]; if(m){ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push({key,...m}); }});
+
+  return (
+    <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',-apple-system,sans-serif",background:"#F1F5F9",overflow:"hidden"}}>
+      {/* SIDEBAR */}
+      <div style={{width:collapsed?60:240,background:isB2B?"#0C4A6E":"#0F172A",color:"#fff",display:"flex",flexDirection:"column",transition:"width 0.2s",flexShrink:0,overflow:"hidden"}}>
+        <div style={{padding:collapsed?"16px 10px":"16px 18px",borderBottom:"1px solid #1E293B",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:8,background:isB2B?"#0EA5E9":"#E8B931",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,color:"#0F172A",flexShrink:0}}>M</div>
+          {!collapsed&&<div><div style={{fontWeight:800,fontSize:14,letterSpacing:1}}>MECADEPOT</div><div style={{fontSize:10,color:"#94A3B8"}}>{isB2B?"Portail B2B":"ERP Unified"}</div></div>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+          {Object.entries(groups).map(([group,items])=>(
+            <div key={group}>
+              {!collapsed&&<div style={{padding:"10px 18px 4px",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:1}}>{group}</div>}
+              {items.map(item=>(
+                <button key={item.key} onClick={()=>setScreen(item.key)} style={{
+                  width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"8px 18px":"7px 18px",
+                  border:"none",background:screen===item.key?(isB2B?"#0369A1":"#1E293B"):"transparent",
+                  color:screen===item.key?"#fff":"#94A3B8",cursor:"pointer",fontSize:13,fontWeight:screen===item.key?600:400,
+                  borderLeft:screen===item.key?`3px solid ${isB2B?"#38BDF8":"#E8B931"}`:"3px solid transparent",textAlign:"left"
+                }}><span style={{fontSize:16,flexShrink:0}}>{item.icon}</span>{!collapsed&&<span>{item.label}</span>}</button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <button onClick={()=>setCollapsed(!collapsed)} style={{padding:12,border:"none",borderTop:"1px solid #1E293B",background:"transparent",color:"#64748B",cursor:"pointer",fontSize:16}}>{collapsed?"\u2192":"\u2190"}</button>
+      </div>
+      {/* MAIN */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* TOPBAR */}
+        <div style={{height:52,background:"#fff",borderBottom:"1px solid #E5E7EB",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:12,color:"#64748B"}}>Role actif :</span>
+            <select value={role} onChange={e=>setRole(e.target.value)} style={{padding:"5px 10px",border:"1px solid #D1D5DB",borderRadius:6,fontSize:13,fontWeight:600,background:(ROLES[role]?.color||"#666")+"15",color:ROLES[role]?.color}}>
+              {Object.entries(ROLES).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label} \u2014 {v.desc}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <span style={{fontSize:20,cursor:"pointer"}}>\u{1F514}</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:ROLES[role]?.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:13}}>{ROLES[role]?.icon}</div>
+              <div><div style={{fontSize:13,fontWeight:600}}>Max</div><div style={{fontSize:10,color:"#9CA3AF"}}>{ROLES[role]?.label}</div></div>
+            </div>
+          </div>
+        </div>
+        {/* BREADCRUMB */}
+        <div style={{padding:"8px 20px",fontSize:12,color:"#94A3B8",background:"#F8FAFC",borderBottom:"1px solid #F1F5F9"}}>
+          {isB2B?"Portail B2B":"ERP"} / {SCREEN_META[screen]?.group} / <span style={{color:"#0F172A",fontWeight:600}}>{SCREEN_META[screen]?.label}</span>
+          <span style={{float:"right",fontSize:11}}>\u{1F4A1} Prototype interactif \u2014 {menu.length} ecrans pour {ROLES[role]?.label}</span>
+        </div>
+        {/* CONTENT */}
+        <div style={{flex:1,overflow:"auto",padding:20}}>
+          <ScreenRouter screen={screen} role={role}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
